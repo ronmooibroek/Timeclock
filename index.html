@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Vision Chess Clock (ROI Demo)</title>
+
+<style>
+  body { font-family: system-ui, Arial, sans-serif; margin: 16px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; }
+  video, canvas { width: 360px; border-radius: 10px; }
+  .stack { position: relative; width: 360px; }
+  .roi {
+    position: absolute;
+    border: 3px dashed #0b5;
+    width: 160px;
+    height: 160px;
+    left: 100px;
+    top: 100px;
+    pointer-events: none;
+  }
+  .timers { display: flex; gap: 12px; }
+  .timer {
+    flex: 1; border: 1px solid #ddd; border-radius: 10px;
+    padding: 12px; text-align: center;
+  }
+  .active { border-color: #0b5; box-shadow: 0 0 0 3px rgba(11,181,90,.2); }
+  .time { font-size: 34px; font-weight: 700; }
+  button { padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .small { font-size: 12px; color: #666; }
+</style>
+
+https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.jsscript>
+https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.jsscript>
+</head>
+
+<body>
+<h2>Vision Chess Clock — ROI Demo</h2>
+<p class="small">Place objects fully inside the green box.</p>
+
+<div class="row">
+  <div class="card">
+    <div class="stack">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="roi"></div>
+    </div>
+
+    <canvas id="roiCanvas" width="224" height="224" style="display:none;"></canvas>
+
+    <div style="margin-top:10px">
+      <button id="startCam">Start Camera</button>
+      <button id="capA" disabled>Capture A</button>
+      <button id="capB" disabled>Capture B</button>
+    </div>
+    <div style="margin-top:6px">
+      <button id="startVision" disabled>Start Vision</button>
+      <button id="stopVision" disabled>Stop</button>
+    </div>
+
+    <div class="small">
+      A score: <span id="sA">-</span> |
+      B score: <span id="sB">-</span>
+    </div>
+  </div>
+
+  <div class="card" style="min-width:420px">
+    <div class="timers">
+      <div class="timer" id="boxA">
+        <div>Clock A</div>
+        <div class="time" id="tA">00:00.0</div>
+      </div>
+      <div class="timer" id="boxB">
+        <div>Clock B</div>
+        <div class="time" id="tB">00:00.0</div>
+      </div>
+    </div>
+    <p class="small">Clock switches only after stable detection.</p>
+  </div>
+</div>
+
+<script>
+let model, stream;
+let embA = null, embB = null;
+let active = null;
+let lastTick = performance.now();
+let tA = 0, tB = 0;
+let stableA = 0, stableB = 0;
+let loop = null;
+
+const threshold = 0.85;
+const stableFrames = 5;
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('roiCanvas');
+const ctx = canvas.getContext('2d');
+
+function fmt(ms) {
+  const t = Math.floor(ms/100);
+  return `${String(Math.floor(t/600)).padStart(2,'0')}:${String(Math.floor(t/10)%60).padStart(2,'0')}.${t%10}`;
+}
+
+function cosine(a,b) {
+  return tf.tidy(()=>tf.sum(a.mul(b))).arraySync();
+}
+
+async function getEmbedding() {
+  return tf.tidy(()=>{
+    const img = tf.browser.fromPixels(canvas).toFloat().div(255);
+    const e = model.infer(img, true).flatten();
+    return e.div(tf.norm(e));
+  });
+}
+
+function grabROI() {
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (!w || !h) return false;
+
+  const sx = w/2 - 80;
+  const sy = h/2 - 80;
+  ctx.drawImage(video, sx, sy, 160, 160, 0, 0, 224, 224);
+  return true;
+}
+
+function setActive(x) {
+  active = x;
+  boxA.classList.toggle('active', x==="A");
+  boxB.classList.toggle('active', x==="B");
+}
+
+function tick() {
+  const now = performance.now();
+  const d = now-lastTick;
+  lastTick = now;
+  if (active==="A") tA+=d;
+  if (active==="B") tB+=d;
+  tAEl.textContent=fmt(tA);
+  tBEl.textContent=fmt(tB);
+  requestAnimationFrame(tick);
+}
+
+async function startCamera() {
+  stream = await navigator.mediaDevices.getUserMedia({video:true});
+  video.srcObject = stream;
+  await new Promise(r=>video.onloadedmetadata=r);
+  capA.disabled = capB.disabled = false;
+}
+
+function capture(which) {
+  if (!grabROI()) return;
+  getEmbedding().then(e=>{
+    if (which==="A") { embA?.dispose(); embA=e; }
+    else { embB?.dispose(); embB=e; }
+    startVision.disabled = !(embA && embB);
+  });
+}
+
+function startVision() {
+  startVision.disabled=true;
+  stopVision.disabled=false;
+
+  loop = setInterval(async ()=>{
+    if (!grabROI()) return;
+    const f = await getEmbedding();
+    const sA = cosine(f, embA);
+    const sB = cosine(f, embB);
+    sAEl.textContent=sA.toFixed(3);
+    sBEl.textContent=sB.toFixed(3);
+    f.dispose();
+
+    if (sA>sB && sA>threshold) { stableA++; stableB=0; }
+    else if (sB>sA && sB>threshold) { stableB++; stableA=0; }
+    else { stableA=stableB=0; setActive(null); }
+
+    if (stableA>=stableFrames) setActive("A");
+    if (stableB>=stableFrames) setActive("B");
+  },200);
+}
+
+function stopVision() {
+  clearInterval(loop);
+  setActive(null);
+  startVision.disabled=false;
+  stopVision.disabled=true;
+  stableA=stableB=0;
+}
+
+startCam.onclick=startCamera;
+capA.onclick=()=>capture("A");
+capB.onclick=()=>capture("B");
+startVision.onclick=startVision;
+stopVision.onclick=stopVision;
+
+mobilenet.load({version:2,alpha:1.0}).then(m=>model=m);
+requestAnimationFrame(tick);
+
+const boxA=document.getElementById('boxA');
+const boxB=document.getElementById('boxB');
+const tAEl=document.getElementById('tA');
+const tBEl=document.getElementById('tB');
+const startVisionBtn=document.getElementById('startVision');
+const stopVisionBtn=document.getElementById('stopVision');
+const sAEl=document.getElementById('sA');
+const sBEl=document.getElementById('sB');
+</script>
+</body>
+</html>
