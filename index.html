@@ -12,523 +12,558 @@
     html, body, #root { height: 100%; }
     body { background: #0a0a0a; }
 
-    @keyframes fadeUp   { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
-    @keyframes tickPulse { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
-    @keyframes scanBar  { 0% { left:-60%; } 100% { left:120%; } }
-    @keyframes fadeIn   { from { opacity:0; } to { opacity:1; } }
-    @keyframes glowPulse { 0%,100% { box-shadow:0 0 8px rgba(212,175,55,0.4); } 50% { box-shadow:0 0 22px rgba(212,175,55,0.9); } }
-    @keyframes dotBlink { 0%,100% { opacity:1; } 50% { opacity:0.2; } }
+    @keyframes fadeUp    { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes fadeIn    { from { opacity:0; } to { opacity:1; } }
+    @keyframes tickPulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+    @keyframes dotBlink  { 0%,100% { opacity:1; } 50% { opacity:0.15; } }
+    @keyframes scanBar   { 0% { left:-65%; } 100% { left:120%; } }
+    @keyframes glowPulse { 0%,100% { box-shadow:0 0 8px rgba(212,175,55,0.35); } 50% { box-shadow:0 0 22px rgba(212,175,55,0.85); } }
+    @keyframes captureFlash { 0% { opacity:0.95; } 100% { opacity:0; } }
+    @keyframes countAnim { from { transform:scale(1.4); opacity:0; } to { transform:scale(1); opacity:1; } }
 
-    .setup-input {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(212,175,55,0.25);
-      border-radius: 4px;
-      color: #f0e6c8;
-      font-family: 'Georgia', serif;
-      font-size: 16px;
-      padding: 12px 16px;
-      width: 100%;
-      outline: none;
+    .inp {
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(212,175,55,0.25);
+      border-radius: 4px; color: #f0e6c8; font-family: 'Georgia',serif; font-size:15px;
+      padding: 11px 15px; width: 100%; outline: none;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
-    .setup-input:focus {
-      border-color: #d4af37;
-      box-shadow: 0 0 0 3px rgba(212,175,55,0.1);
-    }
-    .setup-input::placeholder { color: rgba(240,230,200,0.2); }
+    .inp:focus { border-color:#d4af37; box-shadow:0 0 0 3px rgba(212,175,55,0.1); }
+    .inp::placeholder { color:rgba(240,230,200,0.2); }
 
-    .btn {
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 4px;
-      font-family: 'Georgia', serif;
-      letter-spacing: 2px;
-      cursor: pointer;
-      text-transform: uppercase;
-      transition: all 0.2s;
-    }
-    .btn-gold {
-      background: rgba(212,175,55,0.12);
-      border-color: rgba(212,175,55,0.4);
-      color: #d4af37;
-    }
-    .btn-gold:hover { background: rgba(212,175,55,0.22); }
-    .btn-ghost {
-      background: rgba(255,255,255,0.04);
-      color: rgba(240,230,200,0.5);
-    }
-    .btn-ghost:hover { background: rgba(255,255,255,0.09); color: rgba(240,230,200,0.8); }
-    .btn-solid {
-      background: #d4af37;
-      border-color: #d4af37;
-      color: #0a0a0a;
-      font-weight: bold;
-    }
-    .btn-solid:hover { background: #e8c94a; }
-    .btn-solid:disabled { background: rgba(212,175,55,0.25); border-color: transparent; cursor: not-allowed; }
+    .btn { border-radius:4px; font-family:'Georgia',serif; letter-spacing:2px; cursor:pointer;
+           text-transform:uppercase; transition:all 0.18s; border:1px solid transparent; }
+    .btn:disabled { opacity:0.32; cursor:not-allowed; }
+    .gold  { background:rgba(212,175,55,0.12); border-color:rgba(212,175,55,0.4); color:#d4af37; }
+    .gold:hover:not(:disabled)  { background:rgba(212,175,55,0.22); }
+    .solid { background:#d4af37; border-color:#d4af37; color:#0a0a0a; font-weight:bold; }
+    .solid:hover:not(:disabled) { background:#e8c94a; }
+    .ghost { background:rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.1); color:rgba(240,230,200,0.45); }
+    .ghost:hover:not(:disabled) { background:rgba(255,255,255,0.09); color:rgba(240,230,200,0.8); }
 
-    .clock-num {
-      font-family: 'Courier New', monospace;
-      font-variant-numeric: tabular-nums;
-      line-height: 1;
-    }
+    .clock-num { font-family:'Courier New',monospace; font-variant-numeric:tabular-nums; line-height:1; }
   </style>
 </head>
 <body>
-  <div id="root"></div>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+const DETECT_MS = 1400;
 
-  <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback } = React;
+function fmt(ms) {
+  const s = Math.max(0,Math.floor(ms/1000));
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  if (h>0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
 
-    const DETECT_MS = 1400;
+/* shared camera hook */
+function useCamera(enabled) {
+  const videoRef  = useRef(null);
+  const streamRef = useRef(null);
+  const [ready, setReady] = useState(false);
+  const [err,   setErr]   = useState(null);
 
-    function fmt(ms) {
-      const s = Math.max(0, Math.floor(ms / 1000));
-      const h = Math.floor(s / 3600);
-      const m = Math.floor((s % 3600) / 60);
-      const sec = s % 60;
-      if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-      return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-    }
+  useEffect(()=>{
+    if (!enabled) return;
+    let alive = true;
+    setReady(false); setErr(null);
+    navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:640}, height:{ideal:480} } })
+      .then(stream=>{
+        if (!alive){ stream.getTracks().forEach(t=>t.stop()); return; }
+        streamRef.current = stream;
+        const v = videoRef.current;
+        if (v){ v.srcObject=stream; v.onloadedmetadata=()=>{ v.play(); setReady(true); }; }
+      })
+      .catch(()=>setErr('Camera access denied — please allow permissions and reload.'));
+    return ()=>{ alive=false; streamRef.current?.getTracks().forEach(t=>t.stop()); streamRef.current=null; };
+  },[enabled]);
 
-    /* ─── API KEY GATE ─── */
-    function ApiKeyGate({ onKey }) {
-      const [val, setVal] = useState('');
-      return (
-        <div style={{
-          minHeight:'100vh', background:'#0a0a0a',
-          display:'flex', alignItems:'center', justifyContent:'center',
-          fontFamily:"'Georgia', serif",
-          backgroundImage:'radial-gradient(ellipse at 50% 0%, #1a1408 0%, #0a0a0a 70%)',
-        }}>
-          <div style={{ animation:'fadeUp 0.5s ease both', width:'100%', maxWidth:400, padding:'0 24px', textAlign:'center' }}>
-            <div style={{ fontSize:44, marginBottom:12 }}>♟</div>
-            <h1 style={{ color:'#d4af37', fontSize:24, fontWeight:'normal', letterSpacing:4, textTransform:'uppercase', marginBottom:8 }}>
-              Vision Chess Clock
-            </h1>
-            <p style={{ color:'rgba(240,230,200,0.35)', fontSize:12, letterSpacing:2, marginBottom:36 }}>
-              OBJECT-TRIGGERED TIMER
-            </p>
-            <div style={{ marginBottom:12, textAlign:'left' }}>
-              <label style={{ display:'block', color:'rgba(212,175,55,0.6)', fontSize:11, letterSpacing:2, textTransform:'uppercase', marginBottom:8 }}>
-                Anthropic API Key
-              </label>
-              <input
-                className="setup-input"
-                type="password"
-                placeholder="sk-ant-..."
-                value={val}
-                onChange={e => setVal(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && val.startsWith('sk-') && onKey(val.trim())}
-              />
-            </div>
-            <p style={{ color:'rgba(240,230,200,0.2)', fontSize:11, lineHeight:1.7, marginBottom:24 }}>
-              Your key is used only in this browser tab to call the Claude API.<br/>
-              It is never stored or sent anywhere else.
-            </p>
-            <button
-              className="btn btn-solid"
-              style={{ width:'100%', padding:'13px 0', fontSize:13 }}
-              disabled={!val.startsWith('sk-')}
-              onClick={() => onKey(val.trim())}
-            >
-              Continue
-            </button>
+  const capture = useCallback((w=320,h=240,q=0.75)=>{
+    const v = videoRef.current;
+    if (!v||!ready) return null;
+    const c = document.createElement('canvas');
+    c.width=w; c.height=h;
+    c.getContext('2d').drawImage(v,0,0,w,h);
+    return c.toDataURL('image/jpeg',q).split(',')[1];
+  },[ready]);
+
+  return { videoRef, ready, err, capture };
+}
+
+/* ── API KEY GATE ── */
+function ApiKeyGate({ onKey }) {
+  const [v,setV] = useState('');
+  return (
+    <div style={{ minHeight:'100vh', background:'#0a0a0a', display:'flex', alignItems:'center', justifyContent:'center',
+      fontFamily:"'Georgia',serif", backgroundImage:'radial-gradient(ellipse at 50% 0%,#1a1408,#0a0a0a 70%)' }}>
+      <div style={{ animation:'fadeUp 0.5s ease both', width:'100%', maxWidth:400, padding:'0 24px', textAlign:'center' }}>
+        <div style={{ fontSize:44, marginBottom:10 }}>♟</div>
+        <h1 style={{ color:'#d4af37', fontSize:24, fontWeight:'normal', letterSpacing:4, textTransform:'uppercase', marginBottom:6 }}>Vision Chess Clock</h1>
+        <p style={{ color:'rgba(240,230,200,0.3)', fontSize:11, letterSpacing:2, marginBottom:36 }}>OBJECT-TRIGGERED TIMER</p>
+        <label style={{ display:'block', textAlign:'left', color:'rgba(212,175,55,0.6)', fontSize:11, letterSpacing:2, textTransform:'uppercase', marginBottom:8 }}>
+          Anthropic API Key
+        </label>
+        <input className="inp" type="password" placeholder="sk-ant-..." value={v} onChange={e=>setV(e.target.value)}
+          onKeyDown={e=>{ if(e.key==='Enter'&&v.startsWith('sk-')) onKey(v.trim()); }}
+          style={{ marginBottom:12 }} />
+        <p style={{ color:'rgba(240,230,200,0.18)', fontSize:11, lineHeight:1.7, marginBottom:22 }}>
+          Used only in this browser tab · never stored or sent elsewhere
+        </p>
+        <button className="btn solid" style={{ width:'100%', padding:'13px 0', fontSize:13 }}
+          disabled={!v.startsWith('sk-')} onClick={()=>onKey(v.trim())}>Continue</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── REGISTER ONE OBJECT ── */
+function RegisterObject({ playerNum, color, onCapture }) {
+  const { videoRef, ready, err, capture } = useCamera(true);
+  const [countdown, setCountdown] = useState(null);
+  const [flash,     setFlash]     = useState(false);
+  const [preview,   setPreview]   = useState(null);
+  const [b64Ref,    setB64Ref]    = useState(null);
+  const [name,      setName]      = useState('');
+
+  const startCapture = () => {
+    if (!ready) return;
+    let c = 3;
+    setCountdown(c);
+    const id = setInterval(()=>{
+      c--;
+      if (c > 0) {
+        setCountdown(c);
+      } else {
+        clearInterval(id);
+        setCountdown(null);
+        const b64 = capture(320, 240, 0.85);
+        const v   = videoRef.current;
+        if (v) {
+          const cv = document.createElement('canvas');
+          cv.width=320; cv.height=240;
+          cv.getContext('2d').drawImage(v,0,0,320,240);
+          setPreview(cv.toDataURL('image/jpeg',0.85));
+        }
+        setB64Ref(b64);
+        setFlash(true);
+        setTimeout(()=>setFlash(false), 350);
+      }
+    }, 1000);
+  };
+
+  const confirm = () => {
+    if (b64Ref && name.trim()) onCapture(name.trim(), b64Ref, preview);
+  };
+
+  const retake = () => { setPreview(null); setB64Ref(null); setName(''); };
+
+  const borderColor = `${color}55`;
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:16 }}>
+      <p style={{ color:`${color}bb`, fontSize:11, letterSpacing:3, textTransform:'uppercase' }}>
+        Player {playerNum} — Register Object
+      </p>
+
+      {/* viewfinder */}
+      <div style={{ position:'relative', width:288, height:216, background:'#111', borderRadius:8,
+        overflow:'hidden', border:`1px solid ${borderColor}` }}>
+        <video ref={videoRef} autoPlay playsInline muted
+          style={{ width:'100%', height:'100%', objectFit:'cover', opacity: preview ? 0 : (ready?1:0) }} />
+        {preview && <img src={preview} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} />}
+        {flash    && <div style={{ position:'absolute', inset:0, background:'white', animation:'captureFlash 0.35s ease forwards' }} />}
+        {countdown!==null && (
+          <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.55)' }}>
+            <span style={{ color:'#fff', fontSize:76, fontFamily:"'Georgia',serif", animation:'countAnim 0.4s ease' }}>{countdown}</span>
+          </div>
+        )}
+        {!ready&&!err&&!preview && (
+          <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center',
+            color:'rgba(255,255,255,0.25)', fontSize:12 }}>Initializing camera…</div>
+        )}
+        {err && (
+          <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', padding:14 }}>
+            <span style={{ color:'#e05555', fontSize:11, textAlign:'center', lineHeight:1.5 }}>{err}</span>
+          </div>
+        )}
+        {preview && (
+          <div style={{ position:'absolute', top:8, right:8, background:'rgba(0,0,0,0.7)', borderRadius:3,
+            padding:'3px 8px', color:'#4caf50', fontSize:10, letterSpacing:1 }}>✓ CAPTURED</div>
+        )}
+        {/* corner brackets */}
+        {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h])=>(
+          <div key={v+h} style={{ position:'absolute', ...(v==='top'?{top:7}:{bottom:7}), ...(h==='left'?{left:7}:{right:7}),
+            width:14, height:14,
+            borderTop:    v==='top'    ?`2px solid ${color}`:'none',
+            borderBottom: v==='bottom' ?`2px solid ${color}`:'none',
+            borderLeft:   h==='left'   ?`2px solid ${color}`:'none',
+            borderRight:  h==='right'  ?`2px solid ${color}`:'none',
+          }} />
+        ))}
+      </div>
+
+      {!preview ? (
+        <>
+          <p style={{ color:'rgba(240,230,200,0.32)', fontSize:12, textAlign:'center', lineHeight:1.65, maxWidth:270 }}>
+            Hold your object clearly in front of the camera, then press <strong style={{ color:'rgba(240,230,200,0.6)' }}>Capture</strong>.
+            A 3-second countdown will give you time to position it.
+          </p>
+          <button className="btn gold" style={{ padding:'11px 30px', fontSize:13 }}
+            disabled={!ready||countdown!==null} onClick={startCapture}>
+            {countdown!==null ? `Capturing in ${countdown}…` : '📷  Capture Object'}
+          </button>
+        </>
+      ) : (
+        <>
+          <div style={{ width:'100%', maxWidth:288 }}>
+            <label style={{ display:'block', color:'rgba(212,175,55,0.55)', fontSize:11, letterSpacing:2,
+              textTransform:'uppercase', marginBottom:8 }}>Give this object a label</label>
+            <input className="inp" placeholder={`e.g. red mug, knight piece…`}
+              value={name} onChange={e=>setName(e.target.value)}
+              onKeyDown={e=>{ if(e.key==='Enter'&&name.trim()) confirm(); }} />
+          </div>
+          <div style={{ display:'flex', gap:10 }}>
+            <button className="btn ghost" style={{ padding:'9px 18px', fontSize:12 }} onClick={retake}>↺ Retake</button>
+            <button className="btn solid" style={{ padding:'9px 24px', fontSize:12 }}
+              disabled={!name.trim()} onClick={confirm}>Confirm →</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── SETUP (step through both objects + time) ── */
+function Setup({ onStart }) {
+  const [step, setStep] = useState(1);
+  const [p1,   setP1]   = useState(null);
+  const [p2,   setP2]   = useState(null);
+  const [mins, setMins] = useState(10);
+
+  const handleCapture = (pn, name, b64, preview) => {
+    if (pn===1){ setP1({name,b64,preview}); setStep(2); }
+    else       { setP2({name,b64,preview}); setStep(3); }
+  };
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#0a0a0a', display:'flex', alignItems:'center', justifyContent:'center',
+      fontFamily:"'Georgia',serif", backgroundImage:'radial-gradient(ellipse at 50% 0%,#1a1408,#0a0a0a 70%)',
+      padding:'24px 16px' }}>
+      <div style={{ animation:'fadeUp 0.5s ease both', width:'100%', maxWidth:480 }}>
+
+        {/* header */}
+        <div style={{ textAlign:'center', marginBottom:28 }}>
+          <div style={{ fontSize:38, marginBottom:8 }}>♟</div>
+          <h1 style={{ color:'#d4af37', fontSize:21, fontWeight:'normal', letterSpacing:4, textTransform:'uppercase' }}>
+            {step===1?'Register Player 1': step===2?'Register Player 2':'Ready to Play'}
+          </h1>
+          <div style={{ display:'flex', justifyContent:'center', gap:8, marginTop:14 }}>
+            {[1,2,3].map(s=>(
+              <div key={s} style={{ width:8, height:8, borderRadius:'50%', transition:'all 0.3s',
+                background: s<=step?'#d4af37':'rgba(212,175,55,0.18)',
+                boxShadow: s===step?'0 0 8px #d4af37':'none' }} />
+            ))}
           </div>
         </div>
-      );
-    }
 
-    /* ─── SETUP SCREEN ─── */
-    function Setup({ onStart }) {
-      const [obj1, setObj1] = useState('');
-      const [obj2, setObj2] = useState('');
-      const [mins, setMins] = useState(10);
+        {step===1 && <RegisterObject playerNum={1} color="#d4af37" onCapture={(n,b,p)=>handleCapture(1,n,b,p)} />}
+        {step===2 && <RegisterObject playerNum={2} color="#7eb8d4" onCapture={(n,b,p)=>handleCapture(2,n,b,p)} />}
 
-      return (
-        <div style={{
-          minHeight:'100vh', background:'#0a0a0a',
-          display:'flex', alignItems:'center', justifyContent:'center',
-          fontFamily:"'Georgia', serif",
-          backgroundImage:'radial-gradient(ellipse at 50% 0%, #1a1408 0%, #0a0a0a 70%)',
-        }}>
-          <div style={{ animation:'fadeUp 0.6s ease both', width:'100%', maxWidth:420, padding:'0 24px' }}>
-            <div style={{ textAlign:'center', marginBottom:40 }}>
-              <div style={{ fontSize:46, marginBottom:10 }}>♟</div>
-              <h1 style={{ color:'#d4af37', fontSize:26, fontWeight:'normal', letterSpacing:4, textTransform:'uppercase', margin:0 }}>
-                New Session
-              </h1>
-              <p style={{ color:'rgba(240,230,200,0.3)', fontSize:12, letterSpacing:2, marginTop:8 }}>
-                CHOOSE TWO OBJECTS TO CONTROL THE CLOCK
-              </p>
-            </div>
-
-            <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
-              {[
-                { label:'Player 1 Object', val:obj1, set:setObj1, ph:'e.g. red coffee mug' },
-                { label:'Player 2 Object', val:obj2, set:setObj2, ph:'e.g. blue notebook' },
-              ].map(({ label, val, set, ph }) => (
-                <div key={label}>
-                  <label style={{ display:'block', color:'rgba(212,175,55,0.6)', fontSize:11, letterSpacing:2, textTransform:'uppercase', marginBottom:8 }}>
-                    ◈ {label}
-                  </label>
-                  <input className="setup-input" placeholder={ph} value={val} onChange={e => set(e.target.value)} />
+        {step===3 && (
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:22 }}>
+            {/* preview row */}
+            <div style={{ display:'flex', gap:20, justifyContent:'center' }}>
+              {[p1,p2].map((p,i)=>(
+                <div key={i} style={{ textAlign:'center' }}>
+                  <div style={{ width:128, height:96, borderRadius:6, overflow:'hidden',
+                    border:`1px solid ${i===0?'rgba(212,175,55,0.4)':'rgba(126,184,212,0.4)'}`, marginBottom:7 }}>
+                    <img src={p.preview} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                  </div>
+                  <div style={{ color:i===0?'rgba(212,175,55,0.65)':'rgba(126,184,212,0.65)', fontSize:11, letterSpacing:1 }}>
+                    P{i+1}: {p.name}
+                  </div>
                 </div>
               ))}
-
-              <div>
-                <label style={{ display:'block', color:'rgba(212,175,55,0.6)', fontSize:11, letterSpacing:2, textTransform:'uppercase', marginBottom:8 }}>
-                  ◈ Minutes Per Player
-                </label>
-                <input
-                  className="setup-input"
-                  type="number" min="1" max="180"
-                  value={mins}
-                  onChange={e => setMins(Math.max(1, parseInt(e.target.value) || 10))}
-                />
-              </div>
-
-              <div style={{ height:4 }} />
-
-              <button
-                className="btn btn-solid"
-                style={{ padding:'14px 0', fontSize:14, width:'100%' }}
-                disabled={!obj1.trim() || !obj2.trim()}
-                onClick={() => onStart(obj1.trim(), obj2.trim(), mins)}
-              >
-                Begin Session
-              </button>
             </div>
 
-            <p style={{ textAlign:'center', color:'rgba(240,230,200,0.18)', fontSize:11, marginTop:28, lineHeight:1.7 }}>
-              Show each object to the camera to switch the active clock.<br />
-              AI vision detects objects every ~1.4 seconds.
+            <div style={{ width:'100%', maxWidth:288 }}>
+              <label style={{ display:'block', color:'rgba(212,175,55,0.55)', fontSize:11, letterSpacing:2, textTransform:'uppercase', marginBottom:8 }}>
+                ◈ Minutes Per Player
+              </label>
+              <input className="inp" type="number" min="1" max="180" value={mins}
+                onChange={e=>setMins(Math.max(1,parseInt(e.target.value)||10))} />
+            </div>
+
+            <div style={{ display:'flex', gap:10 }}>
+              <button className="btn ghost" style={{ padding:'9px 18px', fontSize:12 }}
+                onClick={()=>{ setP1(null); setP2(null); setStep(1); }}>↺ Redo All</button>
+              <button className="btn solid" style={{ padding:'13px 36px', fontSize:14 }}
+                onClick={()=>onStart(p1,p2,mins)}>▶  Begin Session</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── MAIN CLOCK ── */
+function Clock({ apiKey, p1, p2, initMs, onNewSession }) {
+  const [t1, setT1] = useState(initMs);
+  const [t2, setT2] = useState(initMs);
+  const [active,  setActive]  = useState(null);
+  const [running, setRunning] = useState(false);
+  const [winner,  setWinner]  = useState(null);
+  const [detecting, setDetecting] = useState(false);
+  const [log,     setLog]     = useState([]);
+  const [lastDet, setLastDet] = useState(null);
+
+  const { videoRef, ready:camReady, err:camErr, capture } = useCamera(true);
+  const lastSwitchRef  = useRef(0);
+  const detectingRef   = useRef(false);
+
+  /* tick */
+  useEffect(()=>{
+    if (!running||winner) return;
+    const id = setInterval(()=>{
+      if (active===1) setT1(t=>{ if(t<=100){setWinner(2);setRunning(false);return 0;} return t-100; });
+      if (active===2) setT2(t=>{ if(t<=100){setWinner(1);setRunning(false);return 0;} return t-100; });
+    },100);
+    return ()=>clearInterval(id);
+  },[running,active,winner]);
+
+  /* detect using reference images */
+  const detect = useCallback(async ()=>{
+    if (detectingRef.current) return;
+    const liveB64 = capture(320,240,0.75);
+    if (!liveB64) return;
+    detectingRef.current = true;
+    setDetecting(true);
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01' },
+        body: JSON.stringify({
+          model:'claude-opus-4-5',
+          max_tokens:10,
+          system:'You compare a live camera frame to two saved reference images. Reply ONLY with the digit 1, the digit 2, or the word neither. No other text.',
+          messages:[{
+            role:'user',
+            content:[
+              { type:'text', text:`Reference image — Object 1 ("${p1.name}"):` },
+              { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:p1.b64 } },
+              { type:'text', text:`Reference image — Object 2 ("${p2.name}"):` },
+              { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:p2.b64 } },
+              { type:'text', text:'Live camera frame:' },
+              { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:liveB64 } },
+              { type:'text', text:'Which reference object is most clearly visible in the live frame? Reply: 1, 2, or neither' }
+            ]
+          }]
+        })
+      });
+      const data = await res.json();
+      const raw  = (data.content?.[0]?.text??'').trim();
+      const det  = raw==='1'?1 : raw==='2'?2 : null;
+      const ts   = new Date().toLocaleTimeString('en-US',{hour12:false});
+      setLog(prev=>[{ det, label:det?(det===1?p1.name:p2.name):'neither', ts },...prev].slice(0,7));
+      if (det) {
+        setLastDet(det);
+        const now = Date.now();
+        if (now-lastSwitchRef.current > 900) {
+          lastSwitchRef.current = now;
+          setActive(prev=>prev!==det?det:prev);
+        }
+      }
+    } catch(e){}
+    finally{ detectingRef.current=false; setDetecting(false); }
+  },[capture,apiKey,p1,p2]);
+
+  useEffect(()=>{
+    if (!running||winner) return;
+    const id = setInterval(detect,DETECT_MS);
+    return ()=>clearInterval(id);
+  },[running,winner,detect]);
+
+  const toggle = ()=>{
+    if (winner) return;
+    if (!running&&active===null) setActive(1);
+    setRunning(r=>!r);
+  };
+  const reset = ()=>{
+    setRunning(false); setActive(null); setWinner(null);
+    setLog([]); setLastDet(null);
+    setT1(initMs); setT2(initMs);
+    lastSwitchRef.current=0;
+  };
+
+  const p1on = active===1&&running&&!winner;
+  const p2on = active===2&&running&&!winner;
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#0a0a0a', fontFamily:"'Georgia',serif",
+      backgroundImage:'radial-gradient(ellipse at 50% 0%,#1a1408,#0a0a0a 70%)', display:'flex', flexDirection:'column' }}>
+
+      {/* winner overlay */}
+      {winner && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.88)', display:'flex', alignItems:'center',
+          justifyContent:'center', zIndex:200, animation:'fadeIn 0.4s ease' }}>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontSize:56, marginBottom:12 }}>♛</div>
+            <h2 style={{ color:'#d4af37', fontSize:30, fontWeight:'normal', letterSpacing:4, textTransform:'uppercase', marginBottom:6 }}>
+              Player {winner} Wins
+            </h2>
+            <p style={{ color:'rgba(240,230,200,0.35)', fontSize:13, letterSpacing:2 }}>
+              {winner===1?p2.name:p1.name} ran out of time
             </p>
-          </div>
-        </div>
-      );
-    }
-
-    /* ─── MAIN CLOCK ─── */
-    function Clock({ apiKey, obj1, obj2, initMs, onNewSession }) {
-      const [t1, setT1] = useState(initMs);
-      const [t2, setT2] = useState(initMs);
-      const [active, setActive] = useState(null);
-      const [running, setRunning] = useState(false);
-      const [winner, setWinner] = useState(null);
-      const [detecting, setDetecting] = useState(false);
-      const [camReady, setCamReady] = useState(false);
-      const [camErr, setCamErr] = useState(null);
-      const [log, setLog] = useState([]);
-      const [lastDet, setLastDet] = useState(null);
-
-      const videoRef = useRef(null);
-      const canvasRef = useRef(null);
-      const streamRef = useRef(null);
-      const lastSwitchRef = useRef(0);
-      const detectingRef = useRef(false);
-
-      /* camera */
-      useEffect(() => {
-        let alive = true;
-        navigator.mediaDevices.getUserMedia({
-          video: { facingMode:'environment', width:{ ideal:640 }, height:{ ideal:480 } }
-        }).then(stream => {
-          if (!alive) { stream.getTracks().forEach(t => t.stop()); return; }
-          streamRef.current = stream;
-          const v = videoRef.current;
-          if (v) {
-            v.srcObject = stream;
-            v.onloadedmetadata = () => { v.play(); setCamReady(true); };
-          }
-        }).catch(() => setCamErr('Camera access denied — please allow camera permissions and reload.'));
-        return () => { alive = false; streamRef.current?.getTracks().forEach(t => t.stop()); };
-      }, []);
-
-      /* tick */
-      useEffect(() => {
-        if (!running || winner) return;
-        const id = setInterval(() => {
-          if (active === 1) setT1(t => { if (t <= 100) { setWinner(2); setRunning(false); return 0; } return t - 100; });
-          if (active === 2) setT2(t => { if (t <= 100) { setWinner(1); setRunning(false); return 0; } return t - 100; });
-        }, 100);
-        return () => clearInterval(id);
-      }, [running, active, winner]);
-
-      /* detect */
-      const capture = useCallback(() => {
-        const v = videoRef.current, c = canvasRef.current;
-        if (!v || !c || !camReady) return null;
-        c.width = 320; c.height = 240;
-        c.getContext('2d').drawImage(v, 0, 0, 320, 240);
-        return c.toDataURL('image/jpeg', 0.72).split(',')[1];
-      }, [camReady]);
-
-      const detect = useCallback(async () => {
-        if (detectingRef.current) return;
-        const img = capture();
-        if (!img) return;
-        detectingRef.current = true;
-        setDetecting(true);
-        try {
-          const res = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: { 'Content-Type':'application/json', 'x-api-key': apiKey, 'anthropic-version':'2023-06-01' },
-            body: JSON.stringify({
-              model: 'claude-opus-4-5',
-              max_tokens: 10,
-              system: 'You identify which of two named objects is most prominently visible. Reply ONLY with: 1, 2, or neither.',
-              messages: [{
-                role: 'user',
-                content: [
-                  { type:'image', source:{ type:'base64', media_type:'image/jpeg', data: img } },
-                  { type:'text', text: `Object 1: "${obj1}"\nObject 2: "${obj2}"\nWhich is most visible? Reply only: 1, 2, or neither` }
-                ]
-              }]
-            })
-          });
-          const data = await res.json();
-          const raw = data.content?.[0]?.text?.trim() ?? '';
-          const det = raw === '1' ? 1 : raw === '2' ? 2 : null;
-          const ts = new Date().toLocaleTimeString('en-US', { hour12:false });
-          setLog(prev => [{ det, label: det ? (det===1?obj1:obj2) : 'neither', ts }, ...prev].slice(0,7));
-          if (det) {
-            setLastDet(det);
-            const now = Date.now();
-            if (now - lastSwitchRef.current > 900) {
-              lastSwitchRef.current = now;
-              setActive(d => { if (d !== det) return det; return d; });
-            }
-          }
-        } catch(e) { /* silent */ }
-        finally { detectingRef.current = false; setDetecting(false); }
-      }, [capture, apiKey, obj1, obj2]);
-
-      useEffect(() => {
-        if (!running || winner) return;
-        const id = setInterval(detect, DETECT_MS);
-        return () => clearInterval(id);
-      }, [running, winner, detect]);
-
-      const toggle = () => {
-        if (winner) return;
-        if (!running && active === null) setActive(1);
-        setRunning(r => !r);
-      };
-
-      const reset = () => {
-        setRunning(false); setActive(null); setWinner(null);
-        setLog([]); setLastDet(null);
-        setT1(initMs); setT2(initMs);
-        lastSwitchRef.current = 0;
-      };
-
-      const p1on = active===1 && running && !winner;
-      const p2on = active===2 && running && !winner;
-
-      return (
-        <div style={{
-          minHeight:'100vh', background:'#0a0a0a', fontFamily:"'Georgia', serif",
-          backgroundImage:'radial-gradient(ellipse at 50% 0%, #1a1408 0%, #0a0a0a 70%)',
-          display:'flex', flexDirection:'column',
-        }}>
-          <canvas ref={canvasRef} style={{ display:'none' }} />
-
-          {/* winner overlay */}
-          {winner && (
-            <div style={{
-              position:'fixed', inset:0, background:'rgba(0,0,0,0.88)',
-              display:'flex', alignItems:'center', justifyContent:'center',
-              zIndex:200, animation:'fadeIn 0.4s ease',
-            }}>
-              <div style={{ textAlign:'center' }}>
-                <div style={{ fontSize:60, marginBottom:14 }}>♛</div>
-                <h2 style={{ color:'#d4af37', fontSize:32, fontWeight:'normal', letterSpacing:4, textTransform:'uppercase', marginBottom:6 }}>
-                  Player {winner} Wins
-                </h2>
-                <p style={{ color:'rgba(240,230,200,0.35)', fontSize:13, letterSpacing:2 }}>
-                  {winner===1 ? obj2 : obj1} ran out of time
-                </p>
-                <div style={{ marginTop:32, display:'flex', gap:12, justifyContent:'center' }}>
-                  <button className="btn btn-gold" style={{ padding:'11px 28px', fontSize:12 }} onClick={reset}>Play Again</button>
-                  <button className="btn btn-ghost" style={{ padding:'11px 28px', fontSize:12 }} onClick={onNewSession}>New Session</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* header */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 20px', borderBottom:'1px solid rgba(212,175,55,0.1)' }}>
-            <span style={{ color:'rgba(212,175,55,0.55)', fontSize:11, letterSpacing:3 }}>♟ VISION CLOCK</span>
-            <div style={{ display:'flex', gap:8 }}>
-              <button className="btn btn-ghost" style={{ padding:'8px 16px', fontSize:11 }} onClick={reset}>Reset</button>
-              <button className="btn btn-ghost" style={{ padding:'8px 16px', fontSize:11 }} onClick={onNewSession}>New Session</button>
-            </div>
-          </div>
-
-          {/* clocks */}
-          <div style={{ display:'flex', flex:1 }}>
-            {[1,2].map(p => {
-              const isOn = p===1 ? p1on : p2on;
-              const time = p===1 ? t1 : t2;
-              const objName = p===1 ? obj1 : obj2;
-              const low = time < 30000;
-              return (
-                <div key={p} style={{
-                  flex:1, display:'flex', flexDirection:'column',
-                  alignItems:'center', justifyContent:'center',
-                  padding:24, position:'relative',
-                  borderRight: p===1 ? '1px solid rgba(212,175,55,0.07)' : 'none',
-                  background: isOn ? 'rgba(212,175,55,0.04)' : 'transparent',
-                  transition:'background 0.4s',
-                }}>
-                  {/* side glow bar */}
-                  <div style={{
-                    position:'absolute',
-                    ...(p===1 ? { left:0 } : { right:0 }),
-                    top:0, bottom:0, width:3,
-                    background: isOn ? '#d4af37' : 'transparent',
-                    boxShadow: isOn ? '0 0 14px #d4af37' : 'none',
-                    transition:'all 0.3s',
-                    animation: isOn ? 'glowPulse 2s ease infinite' : 'none',
-                  }} />
-
-                  <div style={{ color:'rgba(212,175,55,0.45)', fontSize:11, letterSpacing:3, marginBottom:12 }}>
-                    PLAYER {p}
-                  </div>
-                  <div style={{ color:'rgba(212,175,55,0.25)', fontSize:12, marginBottom:20, fontStyle:'italic', maxWidth:150, textAlign:'center' }}>
-                    "{objName}"
-                  </div>
-
-                  <div className="clock-num" style={{
-                    fontSize:'clamp(48px,9vw,84px)',
-                    color: isOn ? (low ? '#ff6b6b' : '#f0e6c8') : (low ? '#993333' : 'rgba(240,230,200,0.38)'),
-                    animation: isOn ? 'tickPulse 1s ease infinite' : 'none',
-                    transition:'color 0.3s',
-                  }}>
-                    {fmt(time)}
-                  </div>
-
-                  {isOn && (
-                    <div style={{ marginTop:18, display:'flex', alignItems:'center', gap:6, color:'rgba(212,175,55,0.7)', fontSize:11, letterSpacing:2 }}>
-                      <span style={{ width:6, height:6, borderRadius:'50%', background:'#d4af37', display:'inline-block', animation:'dotBlink 0.8s ease infinite' }} />
-                      ACTIVE
-                    </div>
-                  )}
-                  {!isOn && lastDet===p && (
-                    <div style={{ marginTop:18, color:'rgba(212,175,55,0.3)', fontSize:10, letterSpacing:2 }}>LAST SEEN ✓</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* play/pause */}
-          <div style={{ display:'flex', justifyContent:'center', padding:'14px 0', borderTop:'1px solid rgba(212,175,55,0.08)', borderBottom:'1px solid rgba(212,175,55,0.08)' }}>
-            <button
-              className="btn btn-gold"
-              style={{ padding:'13px 52px', fontSize:15, letterSpacing:3 }}
-              onClick={toggle}
-              disabled={!!winner}
-            >
-              {running ? '⏸  Pause' : active===null ? '▶  Start' : '▶  Resume'}
-            </button>
-          </div>
-
-          {/* bottom: camera + log */}
-          <div style={{ display:'flex', gap:0, padding:'14px 20px 18px', alignItems:'flex-start' }}>
-            {/* camera */}
-            <div style={{ flexShrink:0 }}>
-              <div style={{ color:'rgba(212,175,55,0.35)', fontSize:10, letterSpacing:2, textTransform:'uppercase', marginBottom:8 }}>
-                Camera Feed
-              </div>
-              <div style={{
-                position:'relative', width:160, height:120,
-                background:'#111', borderRadius:6, overflow:'hidden',
-                border:'1px solid rgba(212,175,55,0.14)',
-              }}>
-                <video ref={videoRef} autoPlay playsInline muted
-                  style={{ width:'100%', height:'100%', objectFit:'cover', opacity: camReady ? 1 : 0 }} />
-                {!camReady && !camErr && (
-                  <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,0.25)', fontSize:11 }}>
-                    Initializing…
-                  </div>
-                )}
-                {camErr && (
-                  <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', padding:10 }}>
-                    <span style={{ color:'#e05555', fontSize:10, textAlign:'center', lineHeight:1.5 }}>{camErr}</span>
-                  </div>
-                )}
-                {detecting && (
-                  <div style={{ position:'absolute', bottom:0, left:0, right:0, height:2, overflow:'hidden' }}>
-                    <div style={{ position:'absolute', top:0, bottom:0, width:'60%', background:'linear-gradient(90deg,transparent,#d4af37,transparent)', animation:'scanBar 0.9s linear infinite' }} />
-                  </div>
-                )}
-                {/* corner brackets */}
-                {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h]) => (
-                  <div key={v+h} style={{
-                    position:'absolute',
-                    ...(v==='top'?{top:5}:{bottom:5}),
-                    ...(h==='left'?{left:5}:{right:5}),
-                    width:11, height:11,
-                    borderTop: v==='top' ? '1.5px solid rgba(212,175,55,0.55)' : 'none',
-                    borderBottom: v==='bottom' ? '1.5px solid rgba(212,175,55,0.55)' : 'none',
-                    borderLeft: h==='left' ? '1.5px solid rgba(212,175,55,0.55)' : 'none',
-                    borderRight: h==='right' ? '1.5px solid rgba(212,175,55,0.55)' : 'none',
-                  }} />
-                ))}
-              </div>
-            </div>
-
-            {/* log */}
-            <div style={{ flex:1, marginLeft:18, minWidth:0 }}>
-              <div style={{ color:'rgba(212,175,55,0.35)', fontSize:10, letterSpacing:2, textTransform:'uppercase', marginBottom:8, display:'flex', alignItems:'center', gap:8 }}>
-                Detection Log
-                {detecting && <span style={{ color:'#d4af37', display:'flex', alignItems:'center', gap:4 }}>
-                  <span style={{ width:5, height:5, borderRadius:'50%', background:'#d4af37', display:'inline-block', animation:'dotBlink 0.6s ease infinite' }} />
-                  Scanning
-                </span>}
-              </div>
-              <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-                {log.length === 0 && (
-                  <span style={{ color:'rgba(240,230,200,0.18)', fontSize:11 }}>No detections yet…</span>
-                )}
-                {log.map((e,i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'center', gap:8, opacity: Math.max(0.15, 1 - i*0.14), fontSize:11, overflow:'hidden' }}>
-                    <span style={{ color:'rgba(212,175,55,0.35)', fontFamily:'monospace', flexShrink:0 }}>{e.ts}</span>
-                    <span style={{
-                      color: e.det ? '#d4af37' : 'rgba(255,255,255,0.2)',
-                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'
-                    }}>
-                      {e.det ? `P${e.det}: "${e.label}"` : '— neither'}
-                    </span>
-                  </div>
-                ))}
-              </div>
+            <div style={{ marginTop:28, display:'flex', gap:10, justifyContent:'center' }}>
+              <button className="btn gold" style={{ padding:'10px 26px', fontSize:12 }} onClick={reset}>Play Again</button>
+              <button className="btn ghost" style={{ padding:'10px 26px', fontSize:12 }} onClick={onNewSession}>New Session</button>
             </div>
           </div>
         </div>
-      );
-    }
+      )}
 
-    /* ─── APP ROOT ─── */
-    function App() {
-      const [apiKey, setApiKey] = useState('');
-      const [session, setSession] = useState(null);
+      {/* header */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'13px 18px',
+        borderBottom:'1px solid rgba(212,175,55,0.1)' }}>
+        <span style={{ color:'rgba(212,175,55,0.5)', fontSize:11, letterSpacing:3 }}>♟ VISION CLOCK</span>
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="btn ghost" style={{ padding:'7px 14px', fontSize:11 }} onClick={reset}>Reset</button>
+          <button className="btn ghost" style={{ padding:'7px 14px', fontSize:11 }} onClick={onNewSession}>New Session</button>
+        </div>
+      </div>
 
-      if (!apiKey) return <ApiKeyGate onKey={setApiKey} />;
-      if (!session) return <Setup onStart={(o1,o2,m) => setSession({ o1, o2, ms: m*60*1000 })} />;
-      return (
-        <Clock
-          apiKey={apiKey}
-          obj1={session.o1}
-          obj2={session.o2}
-          initMs={session.ms}
-          onNewSession={() => setSession(null)}
-        />
-      );
-    }
+      {/* clocks */}
+      <div style={{ display:'flex', flex:1 }}>
+        {[1,2].map(pn=>{
+          const isOn  = pn===1?p1on:p2on;
+          const time  = pn===1?t1:t2;
+          const obj   = pn===1?p1:p2;
+          const low   = time<30000;
+          const color = pn===1?'#d4af37':'#7eb8d4';
+          return (
+            <div key={pn} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center',
+              justifyContent:'center', padding:20, position:'relative',
+              borderRight:pn===1?'1px solid rgba(212,175,55,0.07)':'none',
+              background:isOn?'rgba(212,175,55,0.04)':'transparent', transition:'background 0.4s' }}>
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-  </script>
+              <div style={{ position:'absolute', ...(pn===1?{left:0}:{right:0}), top:0, bottom:0, width:3,
+                background:isOn?color:'transparent', transition:'all 0.3s',
+                boxShadow:isOn?`0 0 14px ${color}`:'none',
+                animation:isOn?'glowPulse 2s ease infinite':'none' }} />
+
+              {/* reference thumb */}
+              <div style={{ width:56, height:42, borderRadius:5, overflow:'hidden', marginBottom:10,
+                border:`1px solid ${color}${isOn?'aa':'2a'}`, transition:'border-color 0.3s' }}>
+                <img src={obj.preview} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+              </div>
+
+              <div style={{ color:`${color}88`, fontSize:10, letterSpacing:3, marginBottom:4 }}>PLAYER {pn}</div>
+              <div style={{ color:`${color}44`, fontSize:12, marginBottom:14, fontStyle:'italic', maxWidth:140, textAlign:'center' }}>
+                "{obj.name}"
+              </div>
+
+              <div className="clock-num" style={{
+                fontSize:'clamp(44px,8.5vw,80px)',
+                color: isOn?(low?'#ff6b6b':'#f0e6c8'):(low?'#883333':'rgba(240,230,200,0.34)'),
+                animation:isOn?'tickPulse 1s ease infinite':'none', transition:'color 0.3s' }}>
+                {fmt(time)}
+              </div>
+
+              {isOn && (
+                <div style={{ marginTop:15, display:'flex', alignItems:'center', gap:6, color:`${color}cc`, fontSize:11, letterSpacing:2 }}>
+                  <span style={{ width:6, height:6, borderRadius:'50%', background:color, display:'inline-block', animation:'dotBlink 0.8s ease infinite' }} />
+                  ACTIVE
+                </div>
+              )}
+              {!isOn && lastDet===pn && (
+                <div style={{ marginTop:15, color:`${color}44`, fontSize:10, letterSpacing:2 }}>LAST SEEN ✓</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* play/pause */}
+      <div style={{ display:'flex', justifyContent:'center', padding:'13px 0',
+        borderTop:'1px solid rgba(212,175,55,0.08)', borderBottom:'1px solid rgba(212,175,55,0.08)' }}>
+        <button className="btn gold" style={{ padding:'12px 50px', fontSize:15, letterSpacing:3 }}
+          onClick={toggle} disabled={!!winner}>
+          {running?'⏸  Pause': active===null?'▶  Start':'▶  Resume'}
+        </button>
+      </div>
+
+      {/* camera + log */}
+      <div style={{ display:'flex', padding:'13px 18px 16px', alignItems:'flex-start' }}>
+        <div style={{ flexShrink:0 }}>
+          <div style={{ color:'rgba(212,175,55,0.3)', fontSize:10, letterSpacing:2, textTransform:'uppercase', marginBottom:7 }}>Live Feed</div>
+          <div style={{ position:'relative', width:152, height:114, background:'#111', borderRadius:6, overflow:'hidden',
+            border:'1px solid rgba(212,175,55,0.14)' }}>
+            <video ref={videoRef} autoPlay playsInline muted
+              style={{ width:'100%', height:'100%', objectFit:'cover', opacity:camReady?1:0 }} />
+            {!camReady&&!camErr && <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center',
+              justifyContent:'center', color:'rgba(255,255,255,0.25)', fontSize:11 }}>Initializing…</div>}
+            {camErr && <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center',
+              justifyContent:'center', padding:10 }}>
+              <span style={{ color:'#e05555', fontSize:10, textAlign:'center', lineHeight:1.5 }}>{camErr}</span>
+            </div>}
+            {detecting && (
+              <div style={{ position:'absolute', bottom:0, left:0, right:0, height:2, overflow:'hidden' }}>
+                <div style={{ position:'absolute', top:0, bottom:0, width:'60%',
+                  background:'linear-gradient(90deg,transparent,#d4af37,transparent)',
+                  animation:'scanBar 0.9s linear infinite' }} />
+              </div>
+            )}
+            {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v,h])=>(
+              <div key={v+h} style={{ position:'absolute', ...(v==='top'?{top:5}:{bottom:5}), ...(h==='left'?{left:5}:{right:5}),
+                width:11, height:11,
+                borderTop:    v==='top'    ?'1.5px solid rgba(212,175,55,0.5)':'none',
+                borderBottom: v==='bottom' ?'1.5px solid rgba(212,175,55,0.5)':'none',
+                borderLeft:   h==='left'   ?'1.5px solid rgba(212,175,55,0.5)':'none',
+                borderRight:  h==='right'  ?'1.5px solid rgba(212,175,55,0.5)':'none',
+              }} />
+            ))}
+          </div>
+        </div>
+
+        <div style={{ flex:1, marginLeft:16, minWidth:0 }}>
+          <div style={{ color:'rgba(212,175,55,0.3)', fontSize:10, letterSpacing:2, textTransform:'uppercase',
+            marginBottom:7, display:'flex', alignItems:'center', gap:8 }}>
+            Detection Log
+            {detecting && <span style={{ color:'#d4af37', display:'flex', alignItems:'center', gap:4 }}>
+              <span style={{ width:5, height:5, borderRadius:'50%', background:'#d4af37', display:'inline-block', animation:'dotBlink 0.6s ease infinite' }} />
+              Scanning
+            </span>}
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+            {log.length===0 && <span style={{ color:'rgba(240,230,200,0.18)', fontSize:11 }}>No detections yet…</span>}
+            {log.map((e,i)=>(
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, opacity:Math.max(0.15,1-i*0.13), fontSize:11, overflow:'hidden' }}>
+                <span style={{ color:'rgba(212,175,55,0.35)', fontFamily:'monospace', flexShrink:0 }}>{e.ts}</span>
+                <span style={{ color:e.det?'#d4af37':'rgba(255,255,255,0.2)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {e.det?`P${e.det}: "${e.label}"`:'— neither'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── ROOT ── */
+function App() {
+  const [apiKey, setApiKey] = useState('');
+  const [session, setSession] = useState(null);
+
+  if (!apiKey)  return <ApiKeyGate onKey={setApiKey} />;
+  if (!session) return <Setup onStart={(p1,p2,m)=>setSession({p1,p2,ms:m*60*1000})} />;
+  return <Clock apiKey={apiKey} p1={session.p1} p2={session.p2} initMs={session.ms}
+    onNewSession={()=>setSession(null)} />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
 </body>
 </html>
