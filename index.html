@@ -1,38 +1,809 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Vision Chess Clock</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body, #root { height: 100%; }
-    body { background: #0a0a0a; }
-    @keyframes fadeUp    { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
-    @keyframes fadeIn    { from { opacity:0; } to { opacity:1; } }
-    @keyframes tickPulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
-    @keyframes dotBlink  { 0%,100% { opacity:1; } 50% { opacity:0.15; } }
-    @keyframes scanBar   { 0% { left:-65%; } 100% { left:120%; } }
-    @keyframes glowPulse { 0%,100% { box-shadow:0 0 8px rgba(212,175,55,0.35); } 50% { box-shadow:0 0 22px rgba(212,175,55,0.85); } }
-    @keyframes captureFlash { 0% { opacity:0.95; } 100% { opacity:0; } }
-    @keyframes countAnim { from { transform:scale(1.4); opacity:0; } to { transform:scale(1); opacity:1; } }
-    .inp { background:rgba(255,255,255,0.04); border:1px solid rgba(212,175,55,0.25); border-radius:4px; color:#f0e6c8; font-family:'Georgia',serif; font-size:15px; padding:11px 15px; width:100%; outline:none; transition:border-color 0.2s,box-shadow 0.2s; }
-    .inp:focus { border-color:#d4af37; box-shadow:0 0 0 3px rgba(212,175,55,0.1); }
-    .inp::placeholder { color:rgba(240,230,200,0.2); }
-    .btn { border-radius:4px; font-family:'Georgia',serif; letter-spacing:2px; cursor:pointer; text-transform:uppercase; transition:all 0.18s; border:1px solid transparent; }
-    .btn:disabled { opacity:0.32; cursor:not-allowed; }
-    .gold  { background:rgba(212,175,55,0.12); border-color:rgba(212,175,55,0.4); color:#d4af37; }
-    .gold:hover:not(:disabled)  { background:rgba(212,175,55,0.22); }
-    .solid { background:#d4af37; border-color:#d4af37; color:#0a0a0a; font-weight:bold; }
-    .solid:hover:not(:disabled) { background:#e8c94a; }
-    .ghost { background:rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.1); color:rgba(240,230,200,0.45); }
-    .ghost:hover:not(:disabled) { background:rgba(255,255,255,0.09); color:rgba(240,230,200,0.8); }
-    .clock-num { font-family:'Courier New',monospace; font-variant-numeric:tabular-nums; line-height:1; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;font-family:'Georgia',serif;background:#0a0a0a;color:#f0e6c8}
+
+    @keyframes fadeUp    {from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes fadeIn    {from{opacity:0}to{opacity:1}}
+    @keyframes tickPulse {0%,100%{opacity:1}50%{opacity:0.45}}
+    @keyframes dotBlink  {0%,100%{opacity:1}50%{opacity:0.1}}
+    @keyframes scanBar   {0%{left:-65%}100%{left:120%}}
+    @keyframes glowGold  {0%,100%{box-shadow:0 0 8px rgba(212,175,55,.35)}50%{box-shadow:0 0 22px rgba(212,175,55,.85)}}
+    @keyframes glowBlue  {0%,100%{box-shadow:0 0 8px rgba(126,184,212,.35)}50%{box-shadow:0 0 22px rgba(126,184,212,.85)}}
+    @keyframes flashW    {0%{opacity:.95}100%{opacity:0}}
+    @keyframes countPop  {from{transform:scale(1.5);opacity:0}to{transform:scale(1);opacity:1}}
+
+    .screen{display:none;min-height:100vh;animation:fadeIn .35s ease both}
+    .screen.active{display:flex}
+
+    /* ── shared layout helpers ── */
+    .center-col{flex-direction:column;align-items:center;justify-content:center;
+      background:#0a0a0a;background-image:radial-gradient(ellipse at 50% 0%,#1a1408,#0a0a0a 70%)}
+
+    /* ── inputs / buttons ── */
+    input.inp{background:rgba(255,255,255,.04);border:1px solid rgba(212,175,55,.25);border-radius:4px;
+      color:#f0e6c8;font-family:'Georgia',serif;font-size:15px;padding:11px 15px;width:100%;outline:none;
+      transition:border-color .2s,box-shadow .2s}
+    input.inp:focus{border-color:#d4af37;box-shadow:0 0 0 3px rgba(212,175,55,.1)}
+    input.inp::placeholder{color:rgba(240,230,200,.2)}
+
+    button.btn{border-radius:4px;font-family:'Georgia',serif;letter-spacing:2px;cursor:pointer;
+      text-transform:uppercase;transition:all .18s;border:1px solid transparent;font-size:12px}
+    button.btn:disabled{opacity:.32;cursor:not-allowed}
+    button.gold {background:rgba(212,175,55,.12);border-color:rgba(212,175,55,.4);color:#d4af37}
+    button.gold:hover:not(:disabled){background:rgba(212,175,55,.22)}
+    button.solid{background:#d4af37;border-color:#d4af37;color:#0a0a0a;font-weight:bold}
+    button.solid:hover:not(:disabled){background:#e8c94a}
+    button.ghost{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);color:rgba(240,230,200,.45)}
+    button.ghost:hover:not(:disabled){background:rgba(255,255,255,.09);color:rgba(240,230,200,.8)}
+
+    /* ── API key screen ── */
+    #screen-key{padding:0 24px}
+    #screen-key .wrap{animation:fadeUp .5s ease both;width:100%;max-width:400px;text-align:center}
+    #screen-key h1{color:#d4af37;font-size:24px;font-weight:normal;letter-spacing:4px;text-transform:uppercase;margin-bottom:6px}
+
+    /* ── register screen ── */
+    #screen-reg{padding:24px 16px}
+    #screen-reg .wrap{animation:fadeUp .45s ease both;width:100%;max-width:480px}
+    #screen-reg h1{color:#d4af37;font-size:21px;font-weight:normal;letter-spacing:4px;text-transform:uppercase;text-align:center}
+    .step-dots{display:flex;justify-content:center;gap:8px;margin-top:14px}
+    .step-dot{width:8px;height:8px;border-radius:50%;background:rgba(212,175,55,.18);transition:all .3s}
+    .step-dot.on{background:#d4af37;box-shadow:0 0 8px #d4af37}
+
+    .viewfinder{position:relative;width:288px;height:216px;background:#111;border-radius:8px;overflow:hidden}
+    .viewfinder video,.viewfinder img.preview{width:100%;height:100%;object-fit:cover}
+    .viewfinder .flash{position:absolute;inset:0;background:white;pointer-events:none;animation:flashW .35s ease forwards}
+    .viewfinder .countdown{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+      background:rgba(0,0,0,.55);font-size:76px;animation:countPop .4s ease}
+    .viewfinder .cam-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+      color:rgba(255,255,255,.25);font-size:12px;text-align:center;padding:14px}
+    .viewfinder .badge{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.7);border-radius:3px;
+      padding:3px 8px;color:#4caf50;font-size:10px;letter-spacing:1px}
+    .corner{position:absolute;width:14px;height:14px}
+    .corner.tl{top:7px;left:7px;border-top:2px solid;border-left:2px solid}
+    .corner.tr{top:7px;right:7px;border-top:2px solid;border-right:2px solid}
+    .corner.bl{bottom:7px;left:7px;border-bottom:2px solid;border-left:2px solid}
+    .corner.br{bottom:7px;right:7px;border-bottom:2px solid;border-right:2px solid}
+
+    .thumb-row{display:flex;gap:20px;justify-content:center}
+    .thumb-box{text-align:center}
+    .thumb-box img{width:128px;height:96px;border-radius:6px;object-fit:cover;display:block;margin-bottom:7px}
+
+    /* ── clock screen ── */
+    #screen-clock{flex-direction:column;background:#0a0a0a;
+      background-image:radial-gradient(ellipse at 50% 0%,#1a1408,#0a0a0a 70%)}
+    .clock-header{display:flex;align-items:center;justify-content:space-between;
+      padding:13px 18px;border-bottom:1px solid rgba(212,175,55,.1);flex-shrink:0}
+    .clock-header span{color:rgba(212,175,55,.5);font-size:11px;letter-spacing:3px}
+    .clock-header .hbtns{display:flex;gap:8px}
+
+    .clocks-row{display:flex;flex:1;min-height:0}
+    .player-panel{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:20px;position:relative;transition:background .4s}
+    .player-panel.p1{border-right:1px solid rgba(212,175,55,.07)}
+    .side-bar{position:absolute;top:0;bottom:0;width:3px;transition:all .3s}
+    .p1 .side-bar{left:0}
+    .p2 .side-bar{right:0}
+    .ref-thumb{width:56px;height:42px;border-radius:5px;object-fit:cover;margin-bottom:10px;transition:border-color .3s}
+    .player-label{font-size:10px;letter-spacing:3px;margin-bottom:4px}
+    .object-name{font-size:12px;font-style:italic;margin-bottom:14px;text-align:center;max-width:140px}
+    .clock-num{font-family:'Courier New',monospace;font-variant-numeric:tabular-nums;line-height:1;transition:color .3s}
+    .active-pip{display:none;margin-top:15px;align-items:center;gap:6px;font-size:11px;letter-spacing:2px}
+    .active-pip .dot{width:6px;height:6px;border-radius:50%;display:inline-block;animation:dotBlink .8s ease infinite}
+    .seen-label{display:none;margin-top:15px;font-size:10px;letter-spacing:2px}
+
+    .clock-controls{display:flex;justify-content:center;padding:13px 0;
+      border-top:1px solid rgba(212,175,55,.08);border-bottom:1px solid rgba(212,175,55,.08);flex-shrink:0}
+
+    .clock-bottom{display:flex;padding:13px 18px 16px;align-items:flex-start;flex-shrink:0}
+    .cam-box{flex-shrink:0}
+    .cam-box label{display:block;color:rgba(212,175,55,.3);font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-bottom:7px}
+    .cam-feed{position:relative;width:152px;height:114px;background:#111;border-radius:6px;overflow:hidden;
+      border:1px solid rgba(212,175,55,.14)}
+    .cam-feed video{width:100%;height:100%;object-fit:cover}
+    .scan-bar-wrap{position:absolute;bottom:0;left:0;right:0;height:2px;overflow:hidden;display:none}
+    .scan-bar{position:absolute;top:0;bottom:0;width:60%;
+      background:linear-gradient(90deg,transparent,#d4af37,transparent);animation:scanBar .9s linear infinite}
+    .cam-corner{position:absolute;width:11px;height:11px}
+    .cam-corner.tl{top:5px;left:5px;border-top:1.5px solid rgba(212,175,55,.5);border-left:1.5px solid rgba(212,175,55,.5)}
+    .cam-corner.tr{top:5px;right:5px;border-top:1.5px solid rgba(212,175,55,.5);border-right:1.5px solid rgba(212,175,55,.5)}
+    .cam-corner.bl{bottom:5px;left:5px;border-bottom:1.5px solid rgba(212,175,55,.5);border-left:1.5px solid rgba(212,175,55,.5)}
+    .cam-corner.br{bottom:5px;right:5px;border-bottom:1.5px solid rgba(212,175,55,.5);border-right:1.5px solid rgba(212,175,55,.5)}
+
+    .log-panel{flex:1;margin-left:16px;min-width:0}
+    .log-title{color:rgba(212,175,55,.3);font-size:10px;letter-spacing:2px;text-transform:uppercase;
+      margin-bottom:7px;display:flex;align-items:center;gap:8px}
+    .scan-pill{color:#d4af37;display:none;align-items:center;gap:4px;font-size:10px}
+    .scan-pill .dot{width:5px;height:5px;border-radius:50%;background:#d4af37;animation:dotBlink .6s ease infinite}
+    .log-entries{display:flex;flex-direction:column;gap:5px}
+    .log-entry{display:flex;align-items:center;gap:8px;font-size:11px;overflow:hidden}
+    .log-ts{color:rgba(212,175,55,.35);font-family:monospace;flex-shrink:0}
+    .log-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .log-raw{color:rgba(255,255,255,.12);font-size:10px;flex-shrink:0}
+    .err-banner{background:rgba(224,85,85,.15);border:1px solid rgba(224,85,85,.35);border-radius:4px;
+      padding:7px 10px;margin-bottom:8px;color:#e05555;font-size:11px;line-height:1.5;display:none}
+
+    /* ── winner overlay ── */
+    #winner-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);
+      align-items:center;justify-content:center;z-index:200;animation:fadeIn .4s ease}
+    #winner-overlay.show{display:flex}
+    #winner-overlay .inner{text-align:center}
+    #winner-overlay h2{color:#d4af37;font-size:30px;font-weight:normal;letter-spacing:4px;text-transform:uppercase;margin-bottom:6px}
+    #winner-overlay p{color:rgba(240,230,200,.35);font-size:13px;letter-spacing:2px}
+    #winner-overlay .wbtns{margin-top:28px;display:flex;gap:10px;justify-content:center}
   </style>
 </head>
 <body>
-<div id="root"></div>
-<script type="text/babel">
+
+<!-- ══════════════════════════════════════
+     SCREEN 1: API KEY
+══════════════════════════════════════ -->
+<div id="screen-key" class="screen active center-col">
+  <div class="wrap">
+    <div style="font-size:44px;margin-bottom:10px">♟</div>
+    <h1>Vision Chess Clock</h1>
+    <p style="color:rgba(240,230,200,.3);font-size:11px;letter-spacing:2px;margin-bottom:36px">OBJECT-TRIGGERED TIMER</p>
+    <label style="display:block;text-align:left;color:rgba(212,175,55,.6);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">
+      Anthropic API Key
+    </label>
+    <input id="key-input" class="inp" type="password" placeholder="sk-ant-..." style="margin-bottom:12px"/>
+    <p style="color:rgba(240,230,200,.18);font-size:11px;line-height:1.7;margin-bottom:22px">
+      Used only in this browser tab · never stored or sent elsewhere
+    </p>
+    <button id="key-btn" class="btn solid" style="width:100%;padding:13px 0;font-size:13px" disabled>Continue</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 2: REGISTER OBJECTS
+══════════════════════════════════════ -->
+<div id="screen-reg" class="screen center-col">
+  <div class="wrap">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="font-size:38px;margin-bottom:8px">♟</div>
+      <h1 id="reg-title">Register Player 1</h1>
+      <div class="step-dots">
+        <div class="step-dot on" id="dot1"></div>
+        <div class="step-dot"    id="dot2"></div>
+        <div class="step-dot"    id="dot3"></div>
+      </div>
+    </div>
+
+    <!-- step 1 & 2: viewfinder -->
+    <div id="reg-capture" style="display:flex;flex-direction:column;align-items:center;gap:16px">
+      <p id="reg-player-label" style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#d4af37cc">
+        Player 1 — Register Object
+      </p>
+      <div class="viewfinder" id="vf">
+        <video id="reg-video" autoplay playsinline muted style="opacity:0"></video>
+        <img  id="reg-preview" class="preview" style="display:none;position:absolute;inset:0"/>
+        <div  id="reg-flash"   class="flash"   style="display:none"></div>
+        <div  id="reg-count"   class="countdown" style="display:none"></div>
+        <div  id="reg-msg"     class="cam-msg">Initializing camera…</div>
+        <div  id="reg-badge"   class="badge" style="display:none">✓ CAPTURED</div>
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+      </div>
+      <p id="reg-hint" style="color:rgba(240,230,200,.32);font-size:12px;text-align:center;line-height:1.65;max-width:270px">
+        Hold your object clearly in front of the camera then press <strong style="color:rgba(240,230,200,.6)">Capture</strong>.
+      </p>
+      <button id="reg-capture-btn" class="btn gold" style="padding:11px 30px;font-size:13px" disabled>
+        📷&nbsp; Capture Object
+      </button>
+      <!-- after capture: label + confirm row (hidden initially) -->
+      <div id="reg-label-row" style="display:none;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:288px">
+        <div style="width:100%">
+          <label style="display:block;color:rgba(212,175,55,.55);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">
+            Give this object a label
+          </label>
+          <input id="reg-name" class="inp" placeholder="e.g. red mug, chess knight…"/>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button id="reg-retake" class="btn ghost" style="padding:9px 18px">↺ Retake</button>
+          <button id="reg-confirm" class="btn solid" style="padding:9px 24px" disabled>Confirm →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- step 3: review + time -->
+    <div id="reg-review" style="display:none;flex-direction:column;align-items:center;gap:22px">
+      <div class="thumb-row">
+        <div class="thumb-box">
+          <img id="thumb1" src="" alt="P1"/>
+          <div id="thumb1-label" style="color:rgba(212,175,55,.65);font-size:11px;letter-spacing:1px"></div>
+        </div>
+        <div class="thumb-box">
+          <img id="thumb2" src="" alt="P2" style="border:1px solid rgba(126,184,212,.4)"/>
+          <div id="thumb2-label" style="color:rgba(126,184,212,.65);font-size:11px;letter-spacing:1px"></div>
+        </div>
+      </div>
+      <div style="width:100%;max-width:288px">
+        <label style="display:block;color:rgba(212,175,55,.55);font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">
+          ◈ Minutes Per Player
+        </label>
+        <input id="mins-input" class="inp" type="number" min="1" max="180" value="10"/>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button id="redo-btn"  class="btn ghost" style="padding:9px 18px">↺ Redo All</button>
+        <button id="begin-btn" class="btn solid" style="padding:13px 36px;font-size:14px">▶&nbsp; Begin Session</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 3: CLOCK
+══════════════════════════════════════ -->
+<div id="screen-clock" class="screen">
+
+  <div class="clock-header">
+    <span>♟ VISION CLOCK</span>
+    <div class="hbtns">
+      <button id="reset-btn"      class="btn ghost" style="padding:7px 14px">Reset</button>
+      <button id="newsession-btn" class="btn ghost" style="padding:7px 14px">New Session</button>
+    </div>
+  </div>
+
+  <div class="clocks-row">
+    <!-- Player 1 -->
+    <div class="player-panel p1" id="panel1">
+      <div class="side-bar" id="bar1"></div>
+      <img id="ref1" class="ref-thumb" src="" alt="" style="border:1px solid rgba(212,175,55,.28)"/>
+      <div class="player-label" id="plabel1" style="color:rgba(212,175,55,.88)">PLAYER 1</div>
+      <div class="object-name" id="oname1" style="color:rgba(212,175,55,.44)"></div>
+      <div class="clock-num"   id="clock1" style="font-size:clamp(44px,8.5vw,80px)">10:00</div>
+      <div class="active-pip"  id="pip1"   style="color:rgba(212,175,55,.8)">
+        <span class="dot" style="background:#d4af37"></span> ACTIVE
+      </div>
+      <div class="seen-label" id="seen1" style="color:rgba(212,175,55,.44)">LAST SEEN ✓</div>
+    </div>
+    <!-- Player 2 -->
+    <div class="player-panel p2" id="panel2">
+      <div class="side-bar" id="bar2"></div>
+      <img id="ref2" class="ref-thumb" src="" alt="" style="border:1px solid rgba(126,184,212,.28)"/>
+      <div class="player-label" id="plabel2" style="color:rgba(126,184,212,.88)">PLAYER 2</div>
+      <div class="object-name" id="oname2" style="color:rgba(126,184,212,.44)"></div>
+      <div class="clock-num"   id="clock2" style="font-size:clamp(44px,8.5vw,80px)">10:00</div>
+      <div class="active-pip"  id="pip2"   style="color:rgba(126,184,212,.8)">
+        <span class="dot" style="background:#7eb8d4"></span> ACTIVE
+      </div>
+      <div class="seen-label" id="seen2" style="color:rgba(126,184,212,.44)">LAST SEEN ✓</div>
+    </div>
+  </div>
+
+  <div class="clock-controls">
+    <button id="playpause-btn" class="btn gold" style="padding:12px 50px;font-size:15px;letter-spacing:3px">▶&nbsp; Start</button>
+  </div>
+
+  <div class="clock-bottom">
+    <div class="cam-box">
+      <label>Live Feed</label>
+      <div class="cam-feed">
+        <video id="clock-video" autoplay playsinline muted></video>
+        <div id="scan-bar-wrap" class="scan-bar-wrap"><div class="scan-bar"></div></div>
+        <div id="cam-init-msg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.25);font-size:11px">Initializing…</div>
+        <div class="cam-corner tl"></div><div class="cam-corner tr"></div>
+        <div class="cam-corner bl"></div><div class="cam-corner br"></div>
+      </div>
+    </div>
+    <div class="log-panel">
+      <div class="log-title">
+        Detection Log
+        <span id="scan-pill" class="scan-pill"><span class="dot"></span> Scanning</span>
+      </div>
+      <div id="err-banner" class="err-banner"></div>
+      <div id="log-entries" class="log-entries">
+        <span style="color:rgba(240,230,200,.18);font-size:11px">No detections yet…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     WINNER OVERLAY
+══════════════════════════════════════ -->
+<div id="winner-overlay">
+  <div class="inner">
+    <div style="font-size:56px;margin-bottom:12px">♛</div>
+    <h2 id="winner-title"></h2>
+    <p  id="winner-sub"></p>
+    <div class="wbtns">
+      <button id="winner-again"   class="btn gold"  style="padding:10px 26px">Play Again</button>
+      <button id="winner-newsess" class="btn ghost" style="padding:10px 26px">New Session</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════ */
+const state = {
+  apiKey: '',
+  p1: null,   // { name, b64, preview }
+  p2: null,
+  regStep: 1, // 1=capture p1, 2=capture p2, 3=review
+  regCurrentPlayer: 1,
+  regB64: null,
+  regStream: null,
+  clockStream: null,
+  t1: 0, t2: 0,
+  active: 0,  // 0=none, 1, 2
+  running: false,
+  winner: 0,
+  tickId: null,
+  detectId: null,
+  detecting: false,
+  lastSwitch: 0,
+  lastDet: 0,
+};
+
+const DETECT_MS   = 1500;
+const SWITCH_COOL = 900;
+
+/* ═══════════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════════ */
+function $(id){ return document.getElementById(id); }
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+function fmtTime(ms){
+  const s = Math.max(0, Math.floor(ms/1000));
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  if(h>0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function captureFrame(video, w=320, h=240, q=0.85){
+  const c = document.createElement('canvas');
+  c.width=w; c.height=h;
+  c.getContext('2d').drawImage(video,0,0,w,h);
+  return c.toDataURL('image/jpeg',q).split(',')[1];
+}
+
+function stopStream(stream){
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+}
+
+/* ═══════════════════════════════════════════════════════
+   SCREEN 1: API KEY
+═══════════════════════════════════════════════════════ */
+$('key-input').addEventListener('input', function(){
+  $('key-btn').disabled = !this.value.startsWith('sk-');
+});
+$('key-input').addEventListener('keydown', function(e){
+  if(e.key==='Enter' && !$('key-btn').disabled) proceedFromKey();
+});
+$('key-btn').addEventListener('click', proceedFromKey);
+
+function proceedFromKey(){
+  state.apiKey = $('key-input').value.trim();
+  startRegFlow();
+}
+
+/* ═══════════════════════════════════════════════════════
+   SCREEN 2: REGISTER
+═══════════════════════════════════════════════════════ */
+function startRegFlow(){
+  state.regStep = 1;
+  state.p1 = null; state.p2 = null;
+  state.regB64 = null;
+  setRegStep(1);
+  showScreen('screen-reg');
+  startRegCamera();
+}
+
+function setRegStep(step){
+  state.regStep = step;
+  // dots
+  for(let i=1;i<=3;i++) $(` dot${i}`);
+  $('dot1').className = 'step-dot' + (step>=1?' on':'');
+  $('dot2').className = 'step-dot' + (step>=2?' on':'');
+  $('dot3').className = 'step-dot' + (step>=3?' on':'');
+
+  if(step===1||step===2){
+    const pn = step;
+    state.regCurrentPlayer = pn;
+    $('reg-title').textContent = `Register Player ${pn}`;
+    $('reg-player-label').textContent = `Player ${pn} — Register Object`;
+    $('reg-player-label').style.color = pn===1 ? '#d4af37cc' : '#7eb8d4cc';
+    // set corner colors
+    document.querySelectorAll('#vf .corner').forEach(c => c.style.borderColor = pn===1?'#d4af37':'#7eb8d4');
+    $('vf').style.borderColor = pn===1 ? 'rgba(212,175,55,.4)' : 'rgba(126,184,212,.4)';
+    resetRegUI();
+    $('reg-capture').style.display = 'flex';
+    $('reg-review').style.display  = 'none';
+  } else {
+    $('reg-title').textContent = 'Ready to Play';
+    $('reg-capture').style.display = 'none';
+    $('reg-review').style.display  = 'flex';
+    stopStream(state.regStream); state.regStream = null;
+    // populate review
+    $('thumb1').src = state.p1.preview;
+    $('thumb1').style.border = '1px solid rgba(212,175,55,.4)';
+    $('thumb1-label').textContent = `P1: ${state.p1.name}`;
+    $('thumb2').src = state.p2.preview;
+    $('thumb2-label').textContent = `P2: ${state.p2.name}`;
+  }
+}
+
+function resetRegUI(){
+  const v = $('reg-video');
+  v.style.opacity = '0';
+  $('reg-preview').style.display = 'none';
+  $('reg-badge').style.display   = 'none';
+  $('reg-flash').style.display   = 'none';
+  $('reg-count').style.display   = 'none';
+  $('reg-msg').style.display     = 'flex';
+  $('reg-msg').textContent       = 'Initializing camera…';
+  $('reg-label-row').style.display = 'none';
+  $('reg-hint').style.display    = 'block';
+  $('reg-capture-btn').style.display = 'block';
+  $('reg-capture-btn').disabled  = true;
+  $('reg-capture-btn').textContent = '📷\u00a0 Capture Object';
+  $('reg-name').value            = '';
+  $('reg-confirm').disabled      = true;
+  state.regB64 = null;
+}
+
+async function startRegCamera(){
+  stopStream(state.regStream);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'environment', width:{ideal:640}, height:{ideal:480} }
+    });
+    state.regStream = stream;
+    const v = $('reg-video');
+    v.srcObject = stream;
+    v.onloadedmetadata = ()=>{
+      v.play();
+      v.style.opacity = '1';
+      $('reg-msg').style.display = 'none';
+      $('reg-capture-btn').disabled = false;
+    };
+  } catch(e){
+    $('reg-msg').textContent = 'Camera access denied — please allow permissions and reload.';
+    $('reg-msg').style.color = '#e05555';
+  }
+}
+
+// Capture button
+$('reg-capture-btn').addEventListener('click', ()=>{
+  if($('reg-capture-btn').disabled) return;
+  doCountdown(3, ()=>{
+    const v    = $('reg-video');
+    const b64  = captureFrame(v, 320, 240, 0.9);
+    const cv   = document.createElement('canvas');
+    cv.width=320; cv.height=240;
+    cv.getContext('2d').drawImage(v,0,0,320,240);
+    const dataURL = cv.toDataURL('image/jpeg',0.9);
+    state.regB64 = b64;
+    // show preview
+    const prev = $('reg-preview');
+    prev.src = dataURL; prev.style.display='block';
+    $('reg-video').style.opacity='0';
+    $('reg-badge').style.display='block';
+    // flash
+    const f = $('reg-flash');
+    f.style.display='block'; f.style.animation='none';
+    requestAnimationFrame(()=>{ f.style.animation='flashW .35s ease forwards'; });
+    setTimeout(()=>{ f.style.display='none'; },400);
+    // show label row
+    $('reg-hint').style.display = 'none';
+    $('reg-capture-btn').style.display = 'none';
+    const lr = $('reg-label-row');
+    lr.style.display = 'flex';
+    // store preview for later
+    state['_regPreview'+state.regCurrentPlayer] = dataURL;
+  });
+});
+
+function doCountdown(n, cb){
+  const el = $('reg-count');
+  $('reg-capture-btn').disabled = true;
+  let cur = n;
+  el.style.display='flex'; el.textContent=cur;
+  const id = setInterval(()=>{
+    cur--;
+    if(cur>0){ el.textContent=cur; el.style.animation='none'; requestAnimationFrame(()=>{el.style.animation='countPop .4s ease';}); }
+    else { clearInterval(id); el.style.display='none'; cb(); }
+  },1000);
+}
+
+// Name input
+$('reg-name').addEventListener('input', function(){
+  $('reg-confirm').disabled = !this.value.trim();
+});
+$('reg-name').addEventListener('keydown', function(e){
+  if(e.key==='Enter' && !$('reg-confirm').disabled) confirmCapture();
+});
+$('reg-confirm').addEventListener('click', confirmCapture);
+
+function confirmCapture(){
+  const name    = $('reg-name').value.trim();
+  const b64     = state.regB64;
+  const preview = state['_regPreview'+state.regCurrentPlayer];
+  const pn      = state.regCurrentPlayer;
+  state['p'+pn] = { name, b64, preview };
+  if(pn===1){ setRegStep(2); startRegCamera(); }
+  else       { setRegStep(3); }
+}
+
+$('reg-retake').addEventListener('click', ()=>{
+  resetRegUI();
+  startRegCamera();
+});
+
+$('redo-btn').addEventListener('click', ()=>{
+  state.p1=null; state.p2=null;
+  setRegStep(1);
+  $('reg-capture').style.display='flex';
+  $('reg-review').style.display='none';
+  startRegCamera();
+});
+
+$('begin-btn').addEventListener('click', ()=>{
+  const mins = parseInt($('mins-input').value)||10;
+  startClock(mins);
+});
+
+/* ═══════════════════════════════════════════════════════
+   SCREEN 3: CLOCK
+═══════════════════════════════════════════════════════ */
+async function startClock(mins){
+  const ms = mins * 60 * 1000;
+  state.t1=ms; state.t2=ms;
+  state.active=0; state.running=false; state.winner=0;
+  state.lastDet=0; state.lastSwitch=0;
+  clearInterval(state.tickId); clearInterval(state.detectId);
+
+  // populate UI
+  $('ref1').src   = state.p1.preview; $('ref2').src   = state.p2.preview;
+  $('oname1').textContent = `"${state.p1.name}"`;
+  $('oname2').textContent = `"${state.p2.name}"`;
+  $('clock1').textContent = fmtTime(ms);
+  $('clock2').textContent = fmtTime(ms);
+  $('err-banner').style.display='none';
+  $('log-entries').innerHTML='<span style="color:rgba(240,230,200,.18);font-size:11px">No detections yet…</span>';
+  $('winner-overlay').classList.remove('show');
+  updatePanelUI();
+  $('playpause-btn').textContent='▶\u00a0 Start';
+
+  showScreen('screen-clock');
+
+  // start clock camera
+  stopStream(state.clockStream);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'environment', width:{ideal:640}, height:{ideal:480} }
+    });
+    state.clockStream = stream;
+    const v = $('clock-video');
+    v.srcObject=stream;
+    v.onloadedmetadata=()=>{ v.play(); $('cam-init-msg').style.display='none'; };
+  } catch(e){
+    $('cam-init-msg').textContent='Camera denied';
+  }
+}
+
+function updatePanelUI(){
+  [1,2].forEach(pn=>{
+    const isOn  = state.active===pn && state.running && !state.winner;
+    const time  = pn===1 ? state.t1 : state.t2;
+    const low   = time < 30000;
+    const color = pn===1 ? '#d4af37' : '#7eb8d4';
+
+    const panel = $('panel'+pn);
+    const bar   = $('bar'+pn);
+    const clk   = $('clock'+pn);
+    const pip   = $('pip'+pn);
+    const seen  = $('seen'+pn);
+    const ref   = $('ref'+pn);
+
+    panel.style.background = isOn ? 'rgba(212,175,55,0.04)' : 'transparent';
+    bar.style.background   = isOn ? color : 'transparent';
+    bar.style.boxShadow    = isOn ? `0 0 14px ${color}` : 'none';
+    bar.style.animation    = isOn ? `glow${pn===1?'Gold':'Blue'} 2s ease infinite` : 'none';
+    ref.style.borderColor  = isOn ? color+'aa' : color+'28';
+    clk.style.color        = isOn ? (low?'#ff6b6b':'#f0e6c8') : (low?'#883333':'rgba(240,230,200,.34)');
+    clk.style.animation    = isOn ? 'tickPulse 1s ease infinite' : 'none';
+    pip.style.display      = isOn ? 'flex' : 'none';
+    seen.style.display     = (!isOn && state.lastDet===pn) ? 'block' : 'none';
+  });
+}
+
+// tick
+function tick(){
+  if(!state.running || state.winner) return;
+  if(state.active===1){
+    state.t1 = Math.max(0, state.t1-100);
+    $('clock1').textContent = fmtTime(state.t1);
+    if(state.t1<=0){ triggerWinner(1); return; }
+  } else if(state.active===2){
+    state.t2 = Math.max(0, state.t2-100);
+    $('clock2').textContent = fmtTime(state.t2);
+    if(state.t2<=0){ triggerWinner(2); return; }
+  }
+  updatePanelUI();
+}
+
+function triggerWinner(loser){
+  // loser's clock ran out, other player wins
+  const winner = loser===1 ? 2 : 1;
+  state.winner=winner; state.running=false;
+  clearInterval(state.tickId); clearInterval(state.detectId);
+  $('winner-title').textContent  = `Player ${winner} Wins`;
+  $('winner-sub').textContent    = `${loser===1?state.p1.name:state.p2.name} ran out of time`;
+  $('winner-overlay').classList.add('show');
+  setDetecting(false);
+}
+
+// play/pause
+$('playpause-btn').addEventListener('click', ()=>{
+  if(state.winner) return;
+  if(!state.running){
+    if(state.active===0) state.active=1;
+    state.running=true;
+    $('playpause-btn').textContent='⏸\u00a0 Pause';
+    state.tickId   = setInterval(tick, 100);
+    state.detectId = setInterval(runDetect, DETECT_MS);
+    updatePanelUI();
+  } else {
+    state.running=false;
+    $('playpause-btn').textContent='▶\u00a0 Resume';
+    clearInterval(state.tickId); clearInterval(state.detectId);
+    setDetecting(false);
+    updatePanelUI();
+  }
+});
+
+// reset / new session
+$('reset-btn').addEventListener('click', resetClock);
+$('winner-again').addEventListener('click', resetClock);
+function resetClock(){
+  state.running=false; state.active=0; state.winner=0; state.lastDet=0;
+  clearInterval(state.tickId); clearInterval(state.detectId);
+  setDetecting(false);
+  const mins = parseInt($('mins-input').value)||10;
+  const ms = mins*60*1000;
+  state.t1=ms; state.t2=ms;
+  $('clock1').textContent=fmtTime(ms); $('clock2').textContent=fmtTime(ms);
+  $('playpause-btn').textContent='▶\u00a0 Start';
+  $('err-banner').style.display='none';
+  $('log-entries').innerHTML='<span style="color:rgba(240,230,200,.18);font-size:11px">No detections yet…</span>';
+  $('winner-overlay').classList.remove('show');
+  updatePanelUI();
+}
+
+$('newsession-btn').addEventListener('click',   goNewSession);
+$('winner-newsess').addEventListener('click',   goNewSession);
+function goNewSession(){
+  state.running=false;
+  clearInterval(state.tickId); clearInterval(state.detectId);
+  stopStream(state.clockStream); state.clockStream=null;
+  $('winner-overlay').classList.remove('show');
+  startRegFlow();
+}
+
+/* ── detection ── */
+function setDetecting(on){
+  state.detecting = on;
+  $('scan-bar-wrap').style.display = on ? 'block' : 'none';
+  const pill = $('scan-pill');
+  pill.style.display = on ? 'flex' : 'none';
+}
+
+async function runDetect(){
+  if(state.detecting || !state.running || state.winner) return;
+  const v = $('clock-video');
+  if(!v.videoWidth) return;
+
+  setDetecting(true);
+  $('err-banner').style.display='none';
+
+  let liveB64;
+  try { liveB64 = captureFrame(v, 320, 240, 0.8); } catch(e){ setDetecting(false); return; }
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true',
+      },
+      body: JSON.stringify({
+        model:'claude-haiku-4-5-20251001',
+        max_tokens:5,
+        system:`You are an object detector for a two-player game clock. You receive two reference photos (one per player) and a live camera frame. Decide which player's object is visible in the live frame.
+Be very generous: partial views, blurry images, unusual angles, and poor lighting are all fine.
+ALWAYS pick 1 or 2 when there is any resemblance at all.
+Only reply "neither" if the live frame is completely empty (blank wall, ceiling, table with no object).
+Reply with ONLY one of: 1   2   neither`,
+        messages:[{
+          role:'user',
+          content:[
+            {type:'text',  text:`Player 1's object is "${state.p1.name}". Reference photo:`},
+            {type:'image', source:{type:'base64',media_type:'image/jpeg',data:state.p1.b64}},
+            {type:'text',  text:`Player 2's object is "${state.p2.name}". Reference photo:`},
+            {type:'image', source:{type:'base64',media_type:'image/jpeg',data:state.p2.b64}},
+            {type:'text',  text:'Live camera frame — which player\'s object is visible?'},
+            {type:'image', source:{type:'base64',media_type:'image/jpeg',data:liveB64}},
+            {type:'text',  text:'Reply with only: 1, 2, or neither'},
+          ],
+        }],
+      }),
+    });
+
+    if(!res.ok){
+      const body = await res.json().catch(()=>({}));
+      const msg  = body?.error?.message || `HTTP ${res.status}`;
+      showErr(`API error: ${msg}`);
+      setDetecting(false);
+      return;
+    }
+
+    const data = await res.json();
+    const raw  = (data.content?.[0]?.text??'').trim();
+    const det  = raw.startsWith('1')?1 : raw.startsWith('2')?2 : 0;
+    addLog(det, raw);
+
+    if(det){
+      state.lastDet = det;
+      const now = Date.now();
+      if(now - state.lastSwitch > SWITCH_COOL){
+        state.lastSwitch = now;
+        if(state.active !== det){
+          state.active = det;
+          updatePanelUI();
+        }
+      }
+    }
+  } catch(e){
+    showErr(`Network error: ${e.message}`);
+  }
+
+  setDetecting(false);
+}
+
+function showErr(msg){
+  const b = $('err-banner');
+  b.textContent = '⚠ '+msg;
+  b.style.display='block';
+}
+
+function addLog(det, raw){
+  const ts = new Date().toLocaleTimeString('en-US',{hour12:false});
+  const name = det===1?state.p1.name : det===2?state.p2.name : 'neither';
+  const color = det ? '#d4af37' : 'rgba(255,255,255,.2)';
+  const text  = det ? `P${det}: "${name}"` : '— neither';
+
+  const div = document.createElement('div');
+  div.className='log-entry';
+  div.innerHTML=`<span class="log-ts">${ts}</span><span class="log-label" style="color:${color}">${text}</span><span class="log-raw">(${raw})</span>`;
+
+  const container = $('log-entries');
+  // remove placeholder
+  const placeholder = container.querySelector('span');
+  if(placeholder) placeholder.remove();
+  container.insertBefore(div, container.firstChild);
+  // keep max 8
+  while(container.children.length > 8) container.removeChild(container.lastChild);
+  // fade older entries
+  Array.from(container.children).forEach((el,i)=>{
+    el.style.opacity = Math.max(0.15, 1 - i*0.12);
+  });
+}
+</script>
+</body>
+</html>
