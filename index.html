@@ -346,17 +346,17 @@ function Clock({ apiKey, p1, p2, initMs, onNewSession }) {
         body: JSON.stringify({
           model:'claude-opus-4-5',
           max_tokens:10,
-          system:'You compare a live camera frame to two saved reference images. Reply ONLY with the digit 1, the digit 2, or the word neither. No other text.',
+          system:`You are a forgiving object detector for a chess clock. You are shown two reference images and a live camera frame. Your job is to guess which reference object is closer to what appears in the live frame. Be very generous — partial views, different angles, poor lighting, and blurry images are all fine. Only reply "neither" if the live frame is completely empty, shows only a blank surface, or is totally unrelated to both objects. When in doubt, always pick 1 or 2. Reply ONLY with: 1, 2, or neither.`,
           messages:[{
             role:'user',
             content:[
-              { type:'text', text:`Reference image — Object 1 ("${p1.name}"):` },
+              { type:'text', text:`Reference image for Object 1 ("${p1.name}"):` },
               { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:p1.b64 } },
-              { type:'text', text:`Reference image — Object 2 ("${p2.name}"):` },
+              { type:'text', text:`Reference image for Object 2 ("${p2.name}"):` },
               { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:p2.b64 } },
-              { type:'text', text:'Live camera frame:' },
+              { type:'text', text:'Live camera frame to identify:' },
               { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:liveB64 } },
-              { type:'text', text:'Which reference object is most clearly visible in the live frame? Reply: 1, 2, or neither' }
+              { type:'text', text:`Which object is more likely visible — 1 ("${p1.name}") or 2 ("${p2.name}")? Be generous and pick the closest match. Only say "neither" if the frame is completely empty or blank. Reply: 1, 2, or neither` }
             ]
           }]
         })
